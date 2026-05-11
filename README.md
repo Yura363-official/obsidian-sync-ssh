@@ -2,6 +2,7 @@
 
 # Obsidian Sync — Руководство по настройке
 
+https://drive.google.com/drive/folders/1GEzCr3WO6mufZ3GYP_XzGNfsD3HystT6?usp=sharing
 ---
 
 ## Содержание
