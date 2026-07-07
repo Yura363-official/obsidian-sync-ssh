@@ -1,0 +1,9 @@
+# Движок браузера (Chromium, не Electron)
+PyQt6>=6.6
+PyQt6-WebEngine>=6.6
+
+# Синхронизация через Google Drive (необязательно — без них браузер работает,
+# просто без синхронизации).
+google-auth>=2.0
+google-auth-oauthlib>=1.0
+google-api-python-client>=2.0

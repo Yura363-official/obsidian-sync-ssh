@@ -1,0 +1,10 @@
+/* Мягкий тёмный режим (пример CSS-расширения Aurora).
+   Инвертируем страницу и возвращаем нормальные цвета картинкам/видео. */
+html {
+  filter: invert(0.92) hue-rotate(180deg) !important;
+  background: #fff !important;
+}
+img, picture, video, canvas, iframe, svg,
+[style*="background-image"] {
+  filter: invert(1) hue-rotate(180deg) !important;
+}

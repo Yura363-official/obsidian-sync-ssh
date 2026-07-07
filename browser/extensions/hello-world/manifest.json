@@ -1,0 +1,8 @@
+{
+  "name": "Hello World",
+  "version": "1.0",
+  "description": "Показывает маленькую плашку Aurora в углу каждой страницы. Пример JS-расширения.",
+  "matches": ["*://*/*"],
+  "js": ["script.js"],
+  "run_at": "document_end"
+}

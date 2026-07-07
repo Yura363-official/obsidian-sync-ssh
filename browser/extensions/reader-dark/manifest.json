@@ -1,0 +1,8 @@
+{
+  "name": "Reader Dark",
+  "version": "1.0",
+  "description": "Мягкий тёмный режим для сайтов через инверсию (пример CSS-расширения). По умолчанию выключено.",
+  "matches": ["*://*/*"],
+  "css": ["style.css"],
+  "run_at": "document_end"
+}
