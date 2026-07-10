@@ -1,6 +1,7 @@
 """Главное окно браузера Aurora: вкладки, тулбар, адресная строка, меню, поиск."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from PyQt6.QtCore import QSize, Qt, QUrl, QTimer
@@ -13,6 +14,117 @@ from PyQt6.QtWebEngineCore import QWebEngineDownloadRequest, QWebEngineScript
 
 from .extensions import build_injection_script
 from .tab import WebView
+
+# Скруглённые вкладки с акцентной подсветкой активной (стиль «сияние»).
+TAB_STYLE = """
+QTabWidget::pane { border: none; }
+QTabBar::tab {
+    background: #1b2136; color: #8b93b3;
+    padding: 8px 16px; margin-right: 4px; min-width: 92px;
+    border: 1px solid #262d47; border-bottom: none;
+    border-top-left-radius: 11px; border-top-right-radius: 11px;
+}
+QTabBar::tab:hover { color: #e9edfb; }
+QTabBar::tab:selected {
+    background: #151a2b; color: #e9edfb;
+    border-top: 2px solid #7c8cff;
+}
+"""
+
+# Палитры режима чтения: тёмная = ночное небо, светлая = тёплая бумага.
+READER_COLORS = {
+    "dark": {"BG": "#0f1320", "FG": "#e9edfb", "MUTED": "#8b93b3",
+             "ACCENT": "#7c8cff", "LINE": "#262d47", "CARD": "rgba(21,26,43,.94)"},
+    "light": {"BG": "#f7f4ec", "FG": "#23201a", "MUTED": "#6b6559",
+              "ACCENT": "#5b6cff", "LINE": "#e3ddce", "CARD": "rgba(255,255,255,.92)"},
+}
+
+READER_CSS = """
+#__aurora_reader{position:fixed;inset:0;z-index:2147483647;overflow:auto;
+  background:@BG@;color:@FG@;
+  font-family:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;}
+#__aurora_reader .rbar{position:sticky;top:0;display:flex;align-items:center;gap:12px;
+  padding:12px 20px;background:@CARD@;border-bottom:1px solid @LINE@;backdrop-filter:blur(8px);
+  font-family:system-ui,-apple-system,'Segoe UI',sans-serif;}
+#__aurora_reader .rbrand{font-weight:800;letter-spacing:-.01em;}
+#__aurora_reader .rmeta{color:@MUTED@;font-size:13px;}
+#__aurora_reader .rspace{flex:1;}
+#__aurora_reader .rbtn{background:transparent;border:1px solid @LINE@;color:@FG@;
+  border-radius:9px;padding:6px 12px;font-size:13px;cursor:pointer;}
+#__aurora_reader .rbtn:hover{border-color:@ACCENT@;}
+#__aurora_reader .rx{color:@ACCENT@;}
+#__aurora_reader .rart{max-width:720px;margin:0 auto;padding:44px 24px 120px;line-height:1.75;}
+#__aurora_reader .rtitle{font-size:2em;line-height:1.15;margin:0 0 .6em;font-weight:800;
+  letter-spacing:-.02em;text-wrap:balance;}
+#__aurora_reader .rart p{margin:0 0 1.1em;}
+#__aurora_reader .rart img{max-width:100%;height:auto;border-radius:10px;margin:1em 0;}
+#__aurora_reader .rart a{color:@ACCENT@;text-underline-offset:3px;}
+#__aurora_reader .rart h2,#__aurora_reader .rart h3{line-height:1.25;margin:1.4em 0 .5em;}
+#__aurora_reader .rart blockquote{margin:1.2em 0;padding:.4em 1.1em;border-left:3px solid @ACCENT@;color:@MUTED@;}
+#__aurora_reader .rart pre{background:@CARD@;border:1px solid @LINE@;border-radius:10px;
+  padding:14px;overflow-x:auto;font-size:.85em;}
+#__aurora_reader .rart ul,#__aurora_reader .rart ol{padding-left:1.4em;}
+"""
+
+# JS режима чтения: извлекает основной текст страницы и показывает чистый экран.
+READER_JS = r"""
+function(CSS){
+  var ID='__aurora_reader';
+  var ex=document.getElementById(ID);
+  if(ex){ ex.remove(); document.documentElement.style.overflow=''; return 'off'; }
+
+  var best=document.body, score=0;
+  var nodes=document.querySelectorAll('article, main, [role=main], .post, .article, .content, #content, section, div');
+  nodes.forEach(function(el){
+    var allp=el.querySelectorAll('p');
+    if(allp.length<2) return;
+    var pl=0; for(var i=0;i<allp.length;i++){ pl+=(allp[i].innerText||'').length; }
+    var s=pl;
+    if(el.tagName==='ARTICLE'||el.tagName==='MAIN') s*=1.5;
+    if(s>score){ score=s; best=el; }
+  });
+
+  var title=(document.querySelector('h1')&&document.querySelector('h1').innerText)||document.title||'';
+  var clone=best.cloneNode(true);
+  clone.querySelectorAll('script,style,noscript,iframe,form,button,input,svg,nav,aside,header,footer,h1,[role=navigation]')
+    .forEach(function(n){ n.remove(); });
+  clone.querySelectorAll('*').forEach(function(n){
+    [].slice.call(n.attributes).forEach(function(a){
+      if(['href','src','alt'].indexOf(a.name)<0) n.removeAttribute(a.name);
+    });
+    try{
+      if(n.tagName==='IMG'&&n.getAttribute('src')) n.setAttribute('src', new URL(n.getAttribute('src'),location.href).href);
+      if(n.tagName==='A'&&n.getAttribute('href')) n.setAttribute('href', new URL(n.getAttribute('href'),location.href).href);
+    }catch(e){}
+  });
+
+  var words=(clone.innerText||'').trim().split(/\s+/).filter(Boolean).length;
+  var mins=Math.max(1, Math.round(words/200));
+
+  var wrap=document.createElement('div'); wrap.id=ID;
+  var st=document.createElement('style'); st.textContent=CSS; wrap.appendChild(st);
+  wrap.insertAdjacentHTML('beforeend',
+    '<div class="rbar"><span class="rbrand">Aurora · чтение</span>'
+    +'<span class="rmeta">'+mins+' мин · '+words+' слов</span><span class="rspace"></span>'
+    +'<button class="rbtn" data-a="-1">A−</button>'
+    +'<button class="rbtn" data-a="1">A+</button>'
+    +'<button class="rbtn rx">✕ Выйти</button></div>');
+  var art=document.createElement('div'); art.className='rart';
+  art.innerHTML='<h1 class="rtitle"></h1>';
+  art.querySelector('.rtitle').textContent=title;
+  art.appendChild(clone);
+  wrap.appendChild(art);
+  document.documentElement.appendChild(wrap);
+  document.documentElement.style.overflow='hidden';
+
+  var size=20; function apply(){ art.style.fontSize=size+'px'; } apply();
+  wrap.querySelector('.rx').onclick=function(){ wrap.remove(); document.documentElement.style.overflow=''; };
+  [].forEach.call(wrap.querySelectorAll('.rbtn[data-a]'), function(b){
+    b.onclick=function(){ size=Math.max(14,Math.min(30,size+parseInt(b.getAttribute('data-a'))*2)); apply(); };
+  });
+  return 'on';
+}
+"""
 
 
 class BrowserWindow(QMainWindow):
@@ -39,6 +151,7 @@ class BrowserWindow(QMainWindow):
         self.tabs.setDocumentMode(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs.setStyleSheet(TAB_STYLE)
         self.setCentralWidget(self.tabs)
 
         self._build_toolbar()
@@ -78,6 +191,7 @@ class BrowserWindow(QMainWindow):
         self.address.setStyleSheet("QLineEdit{border-radius:16px;padding:6px 14px;font-size:14px;}")
         tb.addWidget(self.address)
 
+        button("📖", self.toggle_reader, "Режим чтения (F9)")
         self.star = button("☆", self.toggle_bookmark, "Добавить в закладки")
         button("＋", lambda: self.add_tab(QUrl(self.config.get("home_page")), switch=True), "Новая вкладка")
         button("👤", self.show_profiles_menu, "Профили — переключиться или создать новый")
@@ -110,6 +224,7 @@ class BrowserWindow(QMainWindow):
         act("Ctrl+R", lambda: self.current().reload())
         act("F5", lambda: self.current().reload())
         act("Ctrl+F", self._show_find)
+        act("F9", self.toggle_reader)
         act("Ctrl+D", self.toggle_bookmark)
         act("Ctrl+H", lambda: self.navigate("aurora://history"))
         act("Ctrl+J", lambda: self.navigate("aurora://downloads"))
@@ -217,6 +332,21 @@ class BrowserWindow(QMainWindow):
         self.find_input.setFocus()
         self.find_input.selectAll()
 
+    # ---------- Режим чтения ----------
+    def toggle_reader(self) -> None:
+        view = self.current()
+        if view is None:
+            return
+        url = view.url().toString()
+        if not url or url.startswith("aurora://"):
+            return  # внутренние страницы и так чистые
+        colors = READER_COLORS["light" if self.config.get("theme") == "light" else "dark"]
+        css = READER_CSS
+        for k, v in colors.items():
+            css = css.replace("@" + k + "@", v)
+        js = "(" + READER_JS + ")(" + json.dumps(css) + ");"
+        view.page().runJavaScript(js)
+
     # ---------- Масштаб ----------
     def _zoom(self, delta: float) -> None:
         v = self.current()
@@ -309,6 +439,7 @@ class BrowserWindow(QMainWindow):
         m.addAction("Расширения", lambda: self.navigate("aurora://extensions"))
         m.addSeparator()
         m.addAction("Найти на странице\tCtrl+F", self._show_find)
+        m.addAction("Режим чтения\tF9", self.toggle_reader)
         zoom = m.addMenu("Масштаб")
         zoom.addAction("Увеличить", lambda: self._zoom(0.1))
         zoom.addAction("Уменьшить", lambda: self._zoom(-0.1))
