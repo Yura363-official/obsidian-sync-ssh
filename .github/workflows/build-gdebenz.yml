@@ -181,7 +181,12 @@ jobs:
         run: npx tauri icon app-icon.png
 
       - name: Build Rust library for iOS
-        run: cargo build --manifest-path src-tauri/Cargo.toml --lib --release --target aarch64-apple-ios
+        run: |
+          cargo build --manifest-path src-tauri/Cargo.toml --lib --release --target aarch64-apple-ios
+          # The Xcode project links -lapp from Externals/arm64/release
+          mkdir -p src-tauri/gen/apple/Externals/arm64/release
+          cp src-tauri/target/aarch64-apple-ios/release/libgdebenz_lib.a \
+             src-tauri/gen/apple/Externals/arm64/release/libapp.a
 
       - name: Disable Xcode Rust build phase (lib is prebuilt)
         run: |
