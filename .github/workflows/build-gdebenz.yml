@@ -108,10 +108,10 @@ jobs:
 
       - name: Install Android SDK components
         run: |
-          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" \
-            "ndk;27.1.10909125" "platform-tools"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.1.10909125" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.10909125" >> "$GITHUB_ENV"
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          echo "Using preinstalled NDK: $ANDROID_NDK_LATEST_HOME"
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -135,7 +135,8 @@ jobs:
 
       - name: Sign APK
         run: |
-          BT="$ANDROID_HOME/build-tools/34.0.0"
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          echo "Using build-tools: $BT"
           UNSIGNED=$(find src-tauri/gen/android -name "*-unsigned.apk" | head -1)
           echo "Unsigned APK: $UNSIGNED"
           keytool -genkeypair -keystore ks.jks -alias gdebenz -keyalg RSA -keysize 2048 \
@@ -178,6 +179,22 @@ jobs:
 
       - name: Generate icons
         run: npx tauri icon app-icon.png
+
+      - name: Build Rust library for iOS
+        run: cargo build --manifest-path src-tauri/Cargo.toml --lib --release --target aarch64-apple-ios
+
+      - name: Disable Xcode Rust build phase (lib is prebuilt)
+        run: |
+          python3 - <<'EOF'
+          import glob
+          p = glob.glob('src-tauri/gen/apple/*.xcodeproj/project.pbxproj')[0]
+          s = open(p).read()
+          needle = 'npm run -- tauri ios xcode-script'
+          assert needle in s, 'xcode-script phase not found in ' + p
+          s = s.replace(needle, 'true || npm run -- tauri ios xcode-script')
+          open(p, 'w').write(s)
+          print('patched', p)
+          EOF
 
       - name: Build .app without code signing
         run: |
