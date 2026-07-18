@@ -1,0 +1,12 @@
+{
+  "name": "gdebenz-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "GdeBenz — приложение-обёртка для https://gdebenz.ru/",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
