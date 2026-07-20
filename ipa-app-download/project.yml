@@ -1,0 +1,33 @@
+name: IpaAppDownload
+options:
+  bundleIdPrefix: com.yura363
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.19
+
+targets:
+  IpaAppDownload:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    dependencies:
+      - package: ZIPFoundation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yura363.ipaappdownload
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_KEY_CFBundleDisplayName: "IPA Download"
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: true
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic

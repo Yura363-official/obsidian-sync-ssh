@@ -1,0 +1,22 @@
+# XcodeGen output (генерируется из project.yml)
+*.xcodeproj
+
+# Xcode
+build/
+DerivedData/
+*.xcarchive
+# Собранные .ipa кладём в GitHub Releases, а не в git.
+# Если всё же нужно хранить .ipa в репозитории — положи их в папку Releases/
+# и убери правило ниже.
+build/**/*.ipa
+
+# SPM
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# User settings
+xcuserdata/
+*.xcuserstate
